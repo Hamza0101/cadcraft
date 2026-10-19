@@ -578,6 +578,36 @@ fn dxf_keeps_the_view_the_drawing_was_saved_at() {
     let fitted = read_dxf(write_dxf(&plain).as_bytes()).unwrap();
     let (center, height) = fitted.header.saved_view().unwrap();
     assert!(center.x > 2.4e6 && height > 5e6, "the extents fit: {center:?} {height}");
+
+    // That fit covers the width as well: a wide, flat drawing opened on its height alone would
+    // show a sliver of it, and a drawing with no height at all would have no view.
+    let mut wide = cadcraft_doc::Drawing::new_metric();
+    for (a, b) in [([0.0, 0.0], [100.0, 10.0]), ([0.0, 10.0], [100.0, 10.0])] {
+        let line = cadcraft_doc::Line { a: Vec3::new(a[0], a[1], 0.0), b: Vec3::new(b[0], b[1], 0.0) };
+        wide.add(&Space::Model, cadcraft_doc::Common::default(), EntityKind::Line(line)).unwrap();
+    }
+    let back = read_dxf(write_dxf(&wide).as_bytes()).unwrap();
+    let (_, height) = back.header.saved_view().unwrap();
+    assert!(height > 60.0, "a 100 x 10 drawing needs more than its height: {height}");
+
+    let mut flat = cadcraft_doc::Drawing::new_metric();
+    let line = cadcraft_doc::Line { a: Vec3::ZERO, b: Vec3::new(100.0, 0.0, 0.0) };
+    flat.add(&Space::Model, cadcraft_doc::Common::default(), EntityKind::Line(line)).unwrap();
+    let back = read_dxf(write_dxf(&flat).as_bytes()).unwrap();
+    let (_, height) = back.header.saved_view().unwrap();
+    assert!(height > 60.0, "a horizontal line needs a view with width in it: {height}");
+}
+
+/// A `*ACTIVE` record that leaves its view centre out (no 12/22) is not a view: `$VIEWCTR` and
+/// `$VIEWSIZE` stay, rather than being replaced by the zero the missing groups read as.
+#[test]
+fn a_viewport_record_without_a_centre_keeps_the_header_view() {
+    const NO_CENTRE: &str = "\
+0\nSECTION\n2\nHEADER\n9\n$VIEWCTR\n10\n50.0\n20\n50.0\n9\n$VIEWSIZE\n40\n20.0\n0\nENDSEC\n\
+0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nVPORT\n0\nVPORT\n2\n*ACTIVE\n70\n0\n10\n0.0\n20\n0.0\n11\n1.0\n21\n1.0\n\
+40\n99.0\n0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0.0\n20\n0.0\n11\n9.0\n21\n9.0\n0\nENDSEC\n0\nEOF\n";
+    let d = read_dxf(NO_CENTRE.as_bytes()).unwrap();
+    assert_eq!(d.header.saved_view(), Some((Vec2::new(50.0, 50.0), 20.0)), "the header pair is kept");
 }
 
 #[test]
