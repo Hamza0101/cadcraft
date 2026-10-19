@@ -1576,7 +1576,14 @@ fn tables(tags: &[Tag], d: &mut Drawing, rx: &mut Rx) {
             _ => {}
         }
     }
-    // One *Active viewport is no tiling: the view is the editor's (it zooms to the extents).
+    // A modern file keeps the view it was saved at in the *ACTIVE record (12/22 and 40) as well
+    // as in the HEADER pair; as with the snap and grid spacing above, the record is the newer of
+    // the two and wins. The view is kept even where the record itself goes (#1602).
+    if let Some(t) = d.vports.iter().find(|c| c.is_active()).and_then(|c| c.tiles.first()) {
+        let (center, height) = (t.center, t.height);
+        d.header.set_saved_view(center, height);
+    }
+    // One *Active viewport is no tiling: its single tile is not a configuration to switch to.
     d.vports.retain(|c| c.tiles.len() > usize::from(c.is_active()));
 }
 
